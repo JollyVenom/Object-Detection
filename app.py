@@ -13,11 +13,9 @@ st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
 
 # ---------------- LOAD MODELS ----------------
-# Fast model (real-time)
-MODEL_FAST = YOLO("yolov8n.pt")
-
-# Accurate model (many objects - OIV7)
-MODEL_ACCURATE = YOLO("yolov8s-oiv7.pt")
+MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")   # high accuracy
+MODEL_VIDEO = YOLO("yolov8n.pt")         # fast
+MODEL_IMAGE = YOLO("yolov8s-oiv7.pt")    # high accuracy
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
@@ -54,13 +52,13 @@ if mode == "Image":
         image = Image.open(uploaded_file)
         frame = np.array(image)
 
-        results = MODEL_ACCURATE(frame, imgsz=640)[0]
+        results = MODEL_IMAGE(frame, imgsz=640)[0]
         frame = draw_boxes(frame, results)
 
         st.image(frame, caption="Detection Result", use_container_width=True)
 
 
-# ---------------- VIDEO MODE ----------------
+# ---------------- VIDEO MODE (FAST) ----------------
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
@@ -83,11 +81,9 @@ elif mode == "Video":
             if count % frame_skip != 0:
                 continue
 
-            # Resize for performance
             frame = cv2.resize(frame, (640, 360))
 
-            # Better accuracy model
-            results = MODEL_ACCURATE(frame, imgsz=512)[0]
+            results = MODEL_VIDEO(frame, imgsz=416)[0]
             frame = draw_boxes(frame, results)
 
             stframe.image(frame, channels="BGR", use_container_width=True)
@@ -95,16 +91,16 @@ elif mode == "Video":
         cap.release()
 
 
-# ---------------- WEBCAM MODE ----------------
+# ---------------- WEBCAM MODE (HIGH ACCURACY) ----------------
 elif mode == "Webcam":
-    st.write("Live Webcam Detection")
+    st.write("Live Webcam Detection (High Accuracy Mode)")
 
     class YOLOVideoTransformer(VideoTransformerBase):
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
 
-            # Fast model for real-time
-            results = MODEL_FAST(img, imgsz=480)[0]
+            # Heavier model → slightly lower FPS
+            results = MODEL_WEBCAM(img, imgsz=512)[0]
             img = draw_boxes(img, results)
 
             return img
@@ -116,13 +112,13 @@ elif mode == "Webcam":
             "video": {
                 "width": {"ideal": 1280},
                 "height": {"ideal": 720},
-                "frameRate": {"ideal": 30},
+                "frameRate": {"ideal": 25},
             },
             "audio": False,
         },
     )
 
-    # Force full-width webcam display
+    # Full-width webcam display
     st.markdown(
         """
         <style>
