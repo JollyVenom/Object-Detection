@@ -15,7 +15,7 @@ st.title("YOLO Object Detection App")
 # ---------------- LOAD MODELS ----------------
 MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")
 MODEL_VIDEO = YOLO("yolov8n.pt")
-MODEL_IMAGE = YOLO("yolov8m.pt")
+MODEL_IMAGE = YOLO("yolov8m-oiv7.pt")
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
