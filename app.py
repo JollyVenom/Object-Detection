@@ -58,25 +58,26 @@ if mode == "Image":
 
 
 # ---------------- VIDEO MODE ----------------
-elif mode == "Video":   # ✅ FIXED (no space before elif)
+elif mode == "Video":
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
     if uploaded_video:
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
 
-        cap = cv2.VideoCapture(tfile.name)
-        stframe = st.empty()
+        if st.button("Start Video Detection"):
 
-        frame_buffer = {"frame": None}
-        stop_flag = {"stop": False}
+            cap = cv2.VideoCapture(tfile.name)
+            stframe = st.empty()
 
-        def process_video():
             frame_skip = 2
+            display_skip = 2
             count = 0
             last_results = None
 
-            while cap.isOpened() and not stop_flag["stop"]:
+            import time   # important
+
+            while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -84,31 +85,20 @@ elif mode == "Video":   # ✅ FIXED (no space before elif)
                 frame = cv2.resize(frame, (640, 360))
                 count += 1
 
+                # Detection
                 if count % frame_skip == 0:
                     last_results = MODEL_VIDEO(frame, imgsz=320)[0]
 
                 if last_results is not None:
                     frame = draw_boxes(frame, last_results)
 
-                frame_buffer["frame"] = frame
+                # UI update control
+                if count % display_skip == 0:
+                    stframe.image(frame, channels="BGR", use_container_width=True)
+
+                time.sleep(0.01)   # 🔥 VERY IMPORTANT (prevents crash)
 
             cap.release()
-            stop_flag["stop"] = True
-
-        def display_video():
-            while not stop_flag["stop"]:
-                if frame_buffer["frame"] is not None:
-                    stframe.image(frame_buffer["frame"], channels="BGR", use_container_width=True)
-
-        t1 = threading.Thread(target=process_video)
-        t2 = threading.Thread(target=display_video)
-
-        t1.start()
-        t2.start()
-
-        t1.join()
-        t2.join()
-
 
 # ---------------- WEBCAM MODE ----------------
 elif mode == "Webcam":
