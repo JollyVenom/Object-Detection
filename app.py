@@ -5,24 +5,23 @@ from ultralytics import YOLO
 from PIL import Image
 import tempfile
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+import av
 
 # ---------------- LOAD MODEL ----------------
-@st.cache_resource
-def load_model():
-    return YOLO("yolov8n.pt")
-
-model = load_model()
+model = YOLO("yolov8n-oiv7.pt")  # fast model for web
 
 st.title("YOLO Object Detection App")
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
+
 conf_threshold = st.slider("Confidence Threshold", 0.1, 1.0, 0.5)
 
 # ---------------- STYLE ----------------
-BOX_COLOR = (0, 0, 255)
-THICKNESS = 1
+BOX_COLOR = (0, 0, 255)  # Red
+THICKNESS = 1            # Thin box
 FONT_SCALE = 0.5
+
 
 # ---------------- DRAW FUNCTION ----------------
 def draw_boxes(frame, results):
@@ -72,8 +71,7 @@ elif mode == "Video":
             if not ret:
                 break
 
-            frame = cv2.resize(frame, (416, 320))
-            results = model(frame, imgsz=416)[0]
+            results = model(frame)[0]
             frame = draw_boxes(frame, results)
 
             stframe.image(frame, channels="BGR", use_container_width=True)
@@ -86,30 +84,19 @@ elif mode == "Webcam":
     st.write("Live Webcam Detection")
 
     class YOLOVideoTransformer(VideoTransformerBase):
-        def __init__(self):
-            self.frame_count = 0
-
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
-            self.frame_count += 1
 
-            # Skip frames for performance
-            if self.frame_count % 2 != 0:
-                return img
+            # Optional: resize for performance
+            img = cv2.resize(img, (640, 480))
 
-            img = cv2.resize(img, (416, 320))
-            results = model(img, imgsz=416)[0]
+            results = model(img)[0]
             img = draw_boxes(img, results)
 
             return img
 
-    # ✅ FINAL (Audio disabled + async enabled)
     webrtc_streamer(
         key="yolo-live",
-        video_transformer_factory=YOLOVideoTransformer,
-        media_stream_constraints={
-            "video": True,
-            "audio": False
-        },
-        async_processing=True
+        video_transformer_factory=YOLOVideoTransformer
     )
+
