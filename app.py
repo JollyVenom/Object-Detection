@@ -4,18 +4,18 @@ import numpy as np
 from ultralytics import YOLO
 from PIL import Image
 import tempfile
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 import av
-import threading   # ✅ move here
+import time
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
 
 # ---------------- LOAD MODELS ----------------
-MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")
-MODEL_VIDEO = YOLO("yolov8n.pt")
-MODEL_IMAGE = YOLO("yolov8m.pt")
+MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")   # accuracy
+MODEL_VIDEO = YOLO("yolov8n.pt")         # fast
+MODEL_IMAGE = YOLO("yolov8m.pt")         # high accuracy
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
@@ -57,26 +57,25 @@ if mode == "Image":
         st.image(frame, caption="Detection Result", use_container_width=True)
 
 
-# ---------------- VIDEO MODE ----------------
-elif mode == "Video":   # ✅ FIXED (no space before elif)
+# ---------------- VIDEO MODE (STABLE) ----------------
+elif mode == "Video":
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
     if uploaded_video:
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
 
-        cap = cv2.VideoCapture(tfile.name)
-        stframe = st.empty()
+        if st.button("Start Detection"):
 
-        frame_buffer = {"frame": None}
-        stop_flag = {"stop": False}
+            cap = cv2.VideoCapture(tfile.name)
+            stframe = st.empty()
 
-        def process_video():
             frame_skip = 2
+            display_skip = 2
             count = 0
             last_results = None
 
-            while cap.isOpened() and not stop_flag["stop"]:
+            while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -84,52 +83,45 @@ elif mode == "Video":   # ✅ FIXED (no space before elif)
                 frame = cv2.resize(frame, (640, 360))
                 count += 1
 
+                # Detection
                 if count % frame_skip == 0:
                     last_results = MODEL_VIDEO(frame, imgsz=320)[0]
 
                 if last_results is not None:
                     frame = draw_boxes(frame, last_results)
 
-                frame_buffer["frame"] = frame
+                # Reduce UI updates
+                if count % display_skip == 0:
+                    stframe.image(frame, channels="BGR", use_container_width=True)
+
+                time.sleep(0.01)  # 🔥 prevents crash
 
             cap.release()
-            stop_flag["stop"] = True
-
-        def display_video():
-            while not stop_flag["stop"]:
-                if frame_buffer["frame"] is not None:
-                    stframe.image(frame_buffer["frame"], channels="BGR", use_container_width=True)
-
-        t1 = threading.Thread(target=process_video)
-        t2 = threading.Thread(target=display_video)
-
-        t1.start()
-        t2.start()
-
-        t1.join()
-        t2.join()
 
 
-# ---------------- WEBCAM MODE ----------------
+# ---------------- WEBCAM MODE (FIXED) ----------------
 elif mode == "Webcam":
-    st.write("Live Webcam Detection (High Accuracy Mode)")
+    st.write("Live Webcam Detection")
+
+    RTC_CONFIGURATION = RTCConfiguration({
+        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+    })
 
     class YOLOVideoTransformer(VideoTransformerBase):
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
-            results = MODEL_WEBCAM(img, imgsz=512)[0]
+
+            results = MODEL_WEBCAM(img, imgsz=416)[0]
             img = draw_boxes(img, results)
+
             return img
 
     webrtc_streamer(
         key="yolo-live",
+        rtc_configuration=RTC_CONFIGURATION,  # 🔥 FIXED
         video_transformer_factory=YOLOVideoTransformer,
         media_stream_constraints={
-            "video": {
-                "width": {"ideal": 1280},
-                "height": {"ideal": 720},
-                "frameRate": {"ideal": 25},
-            },
+            "video": True,
             "audio": False,
         },
     )
