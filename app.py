@@ -104,22 +104,3 @@ elif mode == "Video":
                 time.sleep(0.01)
 
             cap.release()
-
-
-# ---------------- CAMERA MODE (STABLE) ----------------
-elif mode == "Camera":
-
-    st.subheader("Capture Image from Camera")
-
-    img_file = st.camera_input("Take a picture")
-
-    if img_file:
-        model = load_model("yolov8n.pt")
-
-        image = Image.open(img_file)
-        frame = np.array(image)
-
-        results = model(frame, imgsz=320)[0]
-        frame = draw_boxes(frame, results)
-
-        st.image(frame, caption="Detection Result", use_container_width=True)
