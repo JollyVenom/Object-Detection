@@ -4,7 +4,7 @@ import numpy as np
 from ultralytics import YOLO
 from PIL import Image
 import tempfile
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
 import time
 
@@ -12,10 +12,10 @@ import time
 st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
 
-# ---------------- LOAD MODELS ----------------
-MODEL_WEBCAM = YOLO("yolov8n.pt")   # accuracy
-MODEL_VIDEO = YOLO("yolov8n.pt")         # fast
-MODEL_IMAGE = YOLO("yolov8n.pt")         # high accuracy
+# ---------------- LAZY LOAD MODEL ----------------
+@st.cache_resource
+def load_model(model_name):
+    return YOLO(model_name)
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
@@ -40,28 +40,39 @@ def draw_boxes(frame, results):
         cv2.rectangle(frame, (x1, y1), (x2, y2), BOX_COLOR, THICKNESS)
         cv2.putText(frame, label, (x1, y1 - 5),
                     cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, BOX_COLOR, 1)
+
     return frame
 
 
 # ---------------- IMAGE MODE ----------------
 if mode == "Image":
+
+    st.subheader("Image Detection (High Quality)")
+
     uploaded_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
 
     if uploaded_file:
+        model = load_model("yolov8s.pt")  # balanced accuracy
+
         image = Image.open(uploaded_file)
         frame = np.array(image)
 
-        results = MODEL_IMAGE(frame, imgsz=640)[0]
+        results = model(frame, imgsz=640)[0]
         frame = draw_boxes(frame, results)
 
         st.image(frame, caption="Detection Result", use_container_width=True)
 
 
-# ---------------- VIDEO MODE (STABLE) ----------------
+# ---------------- VIDEO MODE ----------------
 elif mode == "Video":
+
+    st.subheader("Video Detection (Optimized)")
+
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
     if uploaded_video:
+        model = load_model("yolov8n.pt")  # fast model
+
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
 
@@ -83,47 +94,51 @@ elif mode == "Video":
                 frame = cv2.resize(frame, (640, 360))
                 count += 1
 
-                # Detection
+                # Run detection every few frames
                 if count % frame_skip == 0:
-                    last_results = MODEL_VIDEO(frame, imgsz=320)[0]
+                    last_results = model(frame, imgsz=320)[0]
 
                 if last_results is not None:
                     frame = draw_boxes(frame, last_results)
 
-                # Reduce UI updates
                 if count % display_skip == 0:
                     stframe.image(frame, channels="BGR", use_container_width=True)
 
-                time.sleep(0.01)  # 🔥 prevents crash
+                time.sleep(0.01)
 
             cap.release()
 
 
-# ---------------- WEBCAM MODE (FIXED) ----------------
+# ---------------- WEBCAM MODE ----------------
 elif mode == "Webcam":
-    st.write("Live Webcam Detection")
 
-    RTC_CONFIGURATION = RTCConfiguration({
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-    })
+    st.subheader("Live Webcam Detection (Stable)")
+
+    model = load_model("yolov8n.pt")  # MUST be lightweight
 
     class YOLOVideoTransformer(VideoTransformerBase):
+
+        def __init__(self):
+            self.frame_count = 0
+            self.last_results = None
+
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
+            self.frame_count += 1
 
-            results = MODEL_WEBCAM(img, imgsz=416)[0]
-            img = draw_boxes(img, results)
+            # Skip frames for performance
+            if self.frame_count % 2 == 0:
+                self.last_results = model(img, imgsz=320)[0]
+
+            if self.last_results is not None:
+                img = draw_boxes(img, self.last_results)
 
             return img
 
     webrtc_streamer(
         key="yolo-live",
-        rtc_configuration=RTC_CONFIGURATION,  # 🔥 FIXED
         video_transformer_factory=YOLOVideoTransformer,
-        media_stream_constraints={
-            "video": True,
-            "audio": False,
-        },
+        media_stream_constraints={"video": True, "audio": False},
     )
 
     st.markdown(
