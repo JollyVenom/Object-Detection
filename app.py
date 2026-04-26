@@ -59,6 +59,9 @@ if mode == "Image":
 
 
 # ---------------- VIDEO MODE (FAST) ----------------
+import threading
+
+# ---------------- VIDEO MODE (REAL-TIME SMOOTH) ----------------
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
@@ -68,58 +71,51 @@ elif mode == "Video":
 
         cap = cv2.VideoCapture(tfile.name)
 
-        output_path = "output.mp4"
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        width, height = 640, 360
+        stframe = st.empty()
 
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        frame_buffer = {"frame": None}
+        stop_flag = {"stop": False}
 
-        st.info("Processing video...")
+        # 🔥 THREAD 1 → DETECTION
+        def process_video():
+            frame_skip = 2
+            count = 0
+            last_results = None
 
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+            while cap.isOpened() and not stop_flag["stop"]:
+                ret, frame = cap.read()
+                if not ret:
+                    break
 
-            frame = cv2.resize(frame, (width, height))
-            results = MODEL_VIDEO(frame, imgsz=320)[0]
-            frame = draw_boxes(frame, results)
+                frame = cv2.resize(frame, (640, 360))
+                count += 1
 
-            out.write(frame)
+                if count % frame_skip == 0:
+                    last_results = MODEL_VIDEO(frame, imgsz=320)[0]
 
-        cap.release()
-        out.release()
+                if last_results is not None:
+                    frame = draw_boxes(frame, last_results)
 
-        st.success("Done!")
+                frame_buffer["frame"] = frame
 
-        st.video(output_path)
-# ---------------- WEBCAM MODE (HIGH ACCURACY) ----------------
-elif mode == "Webcam":
-    st.write("Live Webcam Detection (High Accuracy Mode)")
+            cap.release()
+            stop_flag["stop"] = True
 
-    class YOLOVideoTransformer(VideoTransformerBase):
-        def transform(self, frame):
-            img = frame.to_ndarray(format="bgr24")
+        # 🔥 THREAD 2 → DISPLAY
+        def display_video():
+            while not stop_flag["stop"]:
+                if frame_buffer["frame"] is not None:
+                    stframe.image(frame_buffer["frame"], channels="BGR", use_container_width=True)
 
-            # Heavier model → slightly lower FPS
-            results = MODEL_WEBCAM(img, imgsz=512)[0]
-            img = draw_boxes(img, results)
+        # Start threads
+        t1 = threading.Thread(target=process_video)
+        t2 = threading.Thread(target=display_video)
 
-            return img
+        t1.start()
+        t2.start()
 
-    webrtc_streamer(
-        key="yolo-live",
-        video_transformer_factory=YOLOVideoTransformer,
-        media_stream_constraints={
-            "video": {
-                "width": {"ideal": 1280},
-                "height": {"ideal": 720},
-                "frameRate": {"ideal": 25},
-            },
-            "audio": False,
-        },
-    )
+        t1.join()
+        t2.join()
 
     # Full-width webcam display
     st.markdown(
