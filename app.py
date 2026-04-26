@@ -8,20 +8,19 @@ from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
 
 # ---------------- LOAD MODEL ----------------
-model = YOLO("yolov8s-oiv7.pt")  # fast model for web
+# Use nano model for speed (best for real-time)
+model = YOLO("yolov8n.pt")
 
 st.title("YOLO Object Detection App")
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
-
 conf_threshold = st.slider("Confidence Threshold", 0.1, 1.0, 0.5)
 
 # ---------------- STYLE ----------------
-BOX_COLOR = (0, 0, 255)  # Red
-THICKNESS = 1            # Thin box
+BOX_COLOR = (0, 0, 255)
+THICKNESS = 1
 FONT_SCALE = 0.5
-
 
 # ---------------- DRAW FUNCTION ----------------
 def draw_boxes(frame, results):
@@ -49,13 +48,13 @@ if mode == "Image":
         image = Image.open(uploaded_file)
         frame = np.array(image)
 
-        results = model(frame)[0]
+        results = model(frame, imgsz=640)[0]
         frame = draw_boxes(frame, results)
 
         st.image(frame, caption="Detection Result", use_container_width=True)
 
 
-# ---------------- VIDEO MODE ----------------
+# ---------------- VIDEO MODE (OPTIMIZED) ----------------
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
@@ -66,12 +65,23 @@ elif mode == "Video":
         cap = cv2.VideoCapture(tfile.name)
         stframe = st.empty()
 
+        frame_skip = 3   # skip frames for speed
+        count = 0
+
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
 
-            results = model(frame)[0]
+            count += 1
+            if count % frame_skip != 0:
+                continue
+
+            # Resize for performance (important)
+            frame = cv2.resize(frame, (640, 360))
+
+            # Fast inference
+            results = model(frame, imgsz=416)[0]
             frame = draw_boxes(frame, results)
 
             stframe.image(frame, channels="BGR", use_container_width=True)
@@ -79,7 +89,7 @@ elif mode == "Video":
         cap.release()
 
 
-# ---------------- LIVE WEBCAM MODE ----------------
+# ---------------- WEBCAM MODE (CLEAR + FAST) ----------------
 elif mode == "Webcam":
     st.write("Live Webcam Detection")
 
@@ -87,16 +97,21 @@ elif mode == "Webcam":
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
 
-            # Optional: resize for performance
-            img = cv2.resize(img, (640, 480))
-
-            results = model(img)[0]
+            # NO resize here → keeps clarity
+            results = model(img, imgsz=640)[0]
             img = draw_boxes(img, results)
 
             return img
 
     webrtc_streamer(
         key="yolo-live",
-        video_transformer_factory=YOLOVideoTransformer
+        video_transformer_factory=YOLOVideoTransformer,
+        media_stream_constraints={
+            "video": {
+                "width": {"ideal": 1280},
+                "height": {"ideal": 720},
+                "frameRate": {"ideal": 30},
+            },
+            "audio": False,
+        },
     )
-
