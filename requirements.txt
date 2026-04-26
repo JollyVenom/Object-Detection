@@ -1,2 +1,7 @@
+streamlit
 ultralytics
 opencv-python
+pillow
+numpy
+streamlit-webrtc
+av
