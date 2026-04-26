@@ -9,13 +9,12 @@ import av
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide")
-
 st.title("YOLO Object Detection App")
 
 # ---------------- LOAD MODELS ----------------
 MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")   # high accuracy
 MODEL_VIDEO = YOLO("yolov8n.pt")         # fast
-MODEL_IMAGE = YOLO("yolov8m.pt")    # high accuracy
+MODEL_IMAGE = YOLO("yolov8m.pt")         # high accuracy
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
@@ -58,34 +57,42 @@ if mode == "Image":
         st.image(frame, caption="Detection Result", use_container_width=True)
 
 
-# ---------------- VIDEO MODE (FAST) ----------------
-stframe = st.empty()
+# ---------------- VIDEO MODE ----------------
+elif mode == "Video":
+    uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
-frame_skip = 2
-count = 0
-last_results = None   # store previous detections
+    if uploaded_video:
+        tfile = tempfile.NamedTemporaryFile(delete=False)
+        tfile.write(uploaded_video.read())
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
+        cap = cv2.VideoCapture(tfile.name)
 
-    frame = cv2.resize(frame, (640, 360))
-    count += 1
+        stframe = st.empty()
+        frame_skip = 2
+        count = 0
+        last_results = None
 
-    # Run detection only on some frames
-    if count % frame_skip == 0:
-        last_results = MODEL_VIDEO(frame, imgsz=416)[0]
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-    # Use last detection result for skipped frames
-    if last_results is not None:
-        frame = draw_boxes(frame, last_results)
+            frame = cv2.resize(frame, (640, 360))
+            count += 1
 
-    # ALWAYS display frame (important)
-    stframe.image(frame, channels="BGR", use_container_width=True)
+            # Run detection every N frames
+            if count % frame_skip == 0:
+                last_results = MODEL_VIDEO(frame, imgsz=416)[0]
+
+            if last_results is not None:
+                frame = draw_boxes(frame, last_results)
+
+            stframe.image(frame, channels="BGR", use_container_width=True)
+
+        cap.release()
 
 
-# ---------------- WEBCAM MODE (HIGH ACCURACY) ----------------
+# ---------------- WEBCAM MODE ----------------
 elif mode == "Webcam":
     st.write("Live Webcam Detection (High Accuracy Mode)")
 
@@ -93,7 +100,6 @@ elif mode == "Webcam":
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
 
-            # Heavier model → slightly lower FPS
             results = MODEL_WEBCAM(img, imgsz=512)[0]
             img = draw_boxes(img, results)
 
@@ -112,7 +118,6 @@ elif mode == "Webcam":
         },
     )
 
-    # Full-width webcam display
     st.markdown(
         """
         <style>
