@@ -8,7 +8,7 @@ from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
 
 # ---------------- LOAD MODEL ----------------
-model = YOLO("yolov8n-oiv7.pt")  # fast model for web
+model = YOLO("yolov8s-oiv7.pt")  # fast model for web
 
 st.title("YOLO Object Detection App")
 
