@@ -59,7 +59,6 @@ if mode == "Image":
 
 
 # ---------------- VIDEO MODE (FAST) ----------------
-# ---------------- VIDEO MODE ----------------
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
@@ -67,35 +66,25 @@ elif mode == "Video":
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
 
-        cap = cv2.VideoCapture(tfile.name)
-        stframe = st.empty()
+        if st.button("Run Detection (OpenCV Window)"):
+            cap = cv2.VideoCapture(tfile.name)
 
-        frame_skip = 2
-        count = 0
-        last_results = None
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
 
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
+                results = MODEL_VIDEO(frame, imgsz=416)[0]
+                frame = draw_boxes(frame, results)
 
-            frame = cv2.resize(frame, (640, 360))
-            count += 1
+                # SAME AS TRACKER FILE ✅
+                cv2.imshow("Video Detection", frame)
 
-            # Run detection only on some frames
-            if count % frame_skip == 0:
-                last_results = MODEL_VIDEO(frame, imgsz=416)[0]
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
 
-            # Use last detection result
-            if last_results is not None:
-                frame = draw_boxes(frame, last_results)
-
-            # Always display frame
-            stframe.image(frame, channels="BGR", use_container_width=True)
-
-        cap.release()
-
-
+            cap.release()
+            cv2.destroyAllWindows()
 # ---------------- WEBCAM MODE (HIGH ACCURACY) ----------------
 elif mode == "Webcam":
     st.write("Live Webcam Detection (High Accuracy Mode)")
