@@ -6,16 +6,16 @@ from PIL import Image
 import tempfile
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
+import threading   # ✅ move here
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide")
-
 st.title("YOLO Object Detection App")
 
 # ---------------- LOAD MODELS ----------------
-MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")   # high accuracy
-MODEL_VIDEO = YOLO("yolov8n.pt")         # fast
-MODEL_IMAGE = YOLO("yolov8m.pt")    # high accuracy
+MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")
+MODEL_VIDEO = YOLO("yolov8n.pt")
+MODEL_IMAGE = YOLO("yolov8m.pt")
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
@@ -40,7 +40,6 @@ def draw_boxes(frame, results):
         cv2.rectangle(frame, (x1, y1), (x2, y2), BOX_COLOR, THICKNESS)
         cv2.putText(frame, label, (x1, y1 - 5),
                     cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, BOX_COLOR, 1)
-
     return frame
 
 
@@ -58,11 +57,8 @@ if mode == "Image":
         st.image(frame, caption="Detection Result", use_container_width=True)
 
 
-# ---------------- VIDEO MODE (FAST) ----------------
-import threading
-
-# ---------------- VIDEO MODE (REAL-TIME SMOOTH) ----------------
- elif mode == "Video":
+# ---------------- VIDEO MODE ----------------
+elif mode == "Video":   # ✅ FIXED (no space before elif)
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
     if uploaded_video:
@@ -70,13 +66,11 @@ import threading
         tfile.write(uploaded_video.read())
 
         cap = cv2.VideoCapture(tfile.name)
-
         stframe = st.empty()
 
         frame_buffer = {"frame": None}
         stop_flag = {"stop": False}
 
-        # 🔥 THREAD 1 → DETECTION
         def process_video():
             frame_skip = 2
             count = 0
@@ -101,13 +95,11 @@ import threading
             cap.release()
             stop_flag["stop"] = True
 
-        # 🔥 THREAD 2 → DISPLAY
         def display_video():
             while not stop_flag["stop"]:
                 if frame_buffer["frame"] is not None:
                     stframe.image(frame_buffer["frame"], channels="BGR", use_container_width=True)
 
-        # Start threads
         t1 = threading.Thread(target=process_video)
         t2 = threading.Thread(target=display_video)
 
@@ -117,7 +109,31 @@ import threading
         t1.join()
         t2.join()
 
-    # Full-width webcam display
+
+# ---------------- WEBCAM MODE ----------------
+elif mode == "Webcam":
+    st.write("Live Webcam Detection (High Accuracy Mode)")
+
+    class YOLOVideoTransformer(VideoTransformerBase):
+        def transform(self, frame):
+            img = frame.to_ndarray(format="bgr24")
+            results = MODEL_WEBCAM(img, imgsz=512)[0]
+            img = draw_boxes(img, results)
+            return img
+
+    webrtc_streamer(
+        key="yolo-live",
+        video_transformer_factory=YOLOVideoTransformer,
+        media_stream_constraints={
+            "video": {
+                "width": {"ideal": 1280},
+                "height": {"ideal": 720},
+                "frameRate": {"ideal": 25},
+            },
+            "audio": False,
+        },
+    )
+
     st.markdown(
         """
         <style>
