@@ -13,7 +13,7 @@ st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
 
 # ---------------- LOAD MODELS ----------------
-MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")   # accuracy
+MODEL_WEBCAM = YOLO("yolov8n.pt")   # accuracy
 MODEL_VIDEO = YOLO("yolov8n.pt")         # fast
 MODEL_IMAGE = YOLO("yolov8n.pt")         # high accuracy
 
