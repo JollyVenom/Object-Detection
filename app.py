@@ -86,7 +86,7 @@ while cap.isOpened():
 
 
 # ---------------- WEBCAM MODE (HIGH ACCURACY) ----------------
-elif mode == "Webcam":
+ elif mode == "Webcam":
     st.write("Live Webcam Detection (High Accuracy Mode)")
 
     class YOLOVideoTransformer(VideoTransformerBase):
