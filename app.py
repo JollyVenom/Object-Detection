@@ -62,7 +62,7 @@ if mode == "Image":
 import threading
 
 # ---------------- VIDEO MODE (REAL-TIME SMOOTH) ----------------
-elif mode == "Video":
+ elif mode == "Video":
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
     if uploaded_video:
