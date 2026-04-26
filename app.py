@@ -7,15 +7,21 @@ import tempfile
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
 
-# ---------------- LOAD MODEL ----------------
-# Use nano model for speed (best for real-time)
-model = YOLO("yolov8n.pt")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(layout="wide")
 
 st.title("YOLO Object Detection App")
 
+# ---------------- LOAD MODELS ----------------
+# Fast model (real-time)
+MODEL_FAST = YOLO("yolov8n.pt")
+
+# Accurate model (many objects - OIV7)
+MODEL_ACCURATE = YOLO("yolov8s-oiv7.pt")
+
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
-conf_threshold = st.slider("Confidence Threshold", 0.1, 1.0, 0.5)
+conf_threshold = st.slider("Confidence Threshold", 0.1, 1.0, 0.4)
 
 # ---------------- STYLE ----------------
 BOX_COLOR = (0, 0, 255)
@@ -31,7 +37,7 @@ def draw_boxes(frame, results):
 
         x1, y1, x2, y2 = map(int, box.xyxy[0])
         cls = int(box.cls[0])
-        label = f"{model.names[cls]} {conf:.2f}"
+        label = f"{results.names[cls]} {conf:.2f}"
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), BOX_COLOR, THICKNESS)
         cv2.putText(frame, label, (x1, y1 - 5),
@@ -48,13 +54,13 @@ if mode == "Image":
         image = Image.open(uploaded_file)
         frame = np.array(image)
 
-        results = model(frame, imgsz=640)[0]
+        results = MODEL_ACCURATE(frame, imgsz=640)[0]
         frame = draw_boxes(frame, results)
 
         st.image(frame, caption="Detection Result", use_container_width=True)
 
 
-# ---------------- VIDEO MODE (OPTIMIZED) ----------------
+# ---------------- VIDEO MODE ----------------
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
@@ -65,7 +71,7 @@ elif mode == "Video":
         cap = cv2.VideoCapture(tfile.name)
         stframe = st.empty()
 
-        frame_skip = 3   # skip frames for speed
+        frame_skip = 2
         count = 0
 
         while cap.isOpened():
@@ -77,11 +83,11 @@ elif mode == "Video":
             if count % frame_skip != 0:
                 continue
 
-            # Resize for performance (important)
+            # Resize for performance
             frame = cv2.resize(frame, (640, 360))
 
-            # Fast inference
-            results = model(frame, imgsz=416)[0]
+            # Better accuracy model
+            results = MODEL_ACCURATE(frame, imgsz=512)[0]
             frame = draw_boxes(frame, results)
 
             stframe.image(frame, channels="BGR", use_container_width=True)
@@ -89,7 +95,7 @@ elif mode == "Video":
         cap.release()
 
 
-# ---------------- WEBCAM MODE (CLEAR + FAST) ----------------
+# ---------------- WEBCAM MODE ----------------
 elif mode == "Webcam":
     st.write("Live Webcam Detection")
 
@@ -97,8 +103,8 @@ elif mode == "Webcam":
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
 
-            # NO resize here → keeps clarity
-            results = model(img, imgsz=640)[0]
+            # Fast model for real-time
+            results = MODEL_FAST(img, imgsz=480)[0]
             img = draw_boxes(img, results)
 
             return img
@@ -114,4 +120,17 @@ elif mode == "Webcam":
             },
             "audio": False,
         },
+    )
+
+    # Force full-width webcam display
+    st.markdown(
+        """
+        <style>
+        video {
+            width: 100% !important;
+            height: auto !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
