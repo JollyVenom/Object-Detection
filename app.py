@@ -59,36 +59,30 @@ if mode == "Image":
 
 
 # ---------------- VIDEO MODE (FAST) ----------------
-elif mode == "Video":
-    uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
+stframe = st.empty()
 
-    if uploaded_video:
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        tfile.write(uploaded_video.read())
+frame_skip = 2
+count = 0
+last_results = None   # store previous detections
 
-        cap = cv2.VideoCapture(tfile.name)
-        stframe = st.empty()
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
 
-        frame_skip = 2
-        count = 0
+    frame = cv2.resize(frame, (640, 360))
+    count += 1
 
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
+    # Run detection only on some frames
+    if count % frame_skip == 0:
+        last_results = MODEL_VIDEO(frame, imgsz=416)[0]
 
-            count += 1
-            if count % frame_skip != 0:
-                continue
+    # Use last detection result for skipped frames
+    if last_results is not None:
+        frame = draw_boxes(frame, last_results)
 
-            frame = cv2.resize(frame, (640, 360))
-
-            results = MODEL_VIDEO(frame, imgsz=416)[0]
-            frame = draw_boxes(frame, results)
-
-            stframe.image(frame, channels="BGR", use_container_width=True)
-
-        cap.release()
+    # ALWAYS display frame (important)
+    stframe.image(frame, channels="BGR", use_container_width=True)
 
 
 # ---------------- WEBCAM MODE (HIGH ACCURACY) ----------------
