@@ -4,8 +4,6 @@ import numpy as np
 from ultralytics import YOLO
 from PIL import Image
 import tempfile
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import av
 import time
 
 # ---------------- PAGE CONFIG ----------------
@@ -18,7 +16,7 @@ def load_model(model_name):
     return YOLO(model_name)
 
 # ---------------- SIDEBAR ----------------
-mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
+mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Camera"])
 conf_threshold = st.slider("Confidence Threshold", 0.1, 1.0, 0.4)
 
 # ---------------- STYLE ----------------
@@ -47,12 +45,12 @@ def draw_boxes(frame, results):
 # ---------------- IMAGE MODE ----------------
 if mode == "Image":
 
-    st.subheader("Image Detection (High Quality)")
+    st.subheader("Image Detection")
 
     uploaded_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
 
     if uploaded_file:
-        model = load_model("yolov8s.pt")  # balanced accuracy
+        model = load_model("yolov8s.pt")
 
         image = Image.open(uploaded_file)
         frame = np.array(image)
@@ -66,12 +64,12 @@ if mode == "Image":
 # ---------------- VIDEO MODE ----------------
 elif mode == "Video":
 
-    st.subheader("Video Detection (Optimized)")
+    st.subheader("Video Detection")
 
     uploaded_video = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
     if uploaded_video:
-        model = load_model("yolov8n.pt")  # fast model
+        model = load_model("yolov8n.pt")
 
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
@@ -94,7 +92,6 @@ elif mode == "Video":
                 frame = cv2.resize(frame, (640, 360))
                 count += 1
 
-                # Run detection every few frames
                 if count % frame_skip == 0:
                     last_results = model(frame, imgsz=320)[0]
 
@@ -109,46 +106,20 @@ elif mode == "Video":
             cap.release()
 
 
-# ---------------- WEBCAM MODE ----------------
-elif mode == "Webcam":
+# ---------------- CAMERA MODE (STABLE) ----------------
+elif mode == "Camera":
 
-    st.subheader("Live Webcam Detection (Stable)")
+    st.subheader("Capture Image from Camera")
 
-    model = load_model("yolov8n.pt")  # MUST be lightweight
+    img_file = st.camera_input("Take a picture")
 
-    class YOLOVideoTransformer(VideoTransformerBase):
+    if img_file:
+        model = load_model("yolov8n.pt")
 
-        def __init__(self):
-            self.frame_count = 0
-            self.last_results = None
+        image = Image.open(img_file)
+        frame = np.array(image)
 
-        def transform(self, frame):
-            img = frame.to_ndarray(format="bgr24")
-            self.frame_count += 1
+        results = model(frame, imgsz=320)[0]
+        frame = draw_boxes(frame, results)
 
-            # Skip frames for performance
-            if self.frame_count % 2 == 0:
-                self.last_results = model(img, imgsz=320)[0]
-
-            if self.last_results is not None:
-                img = draw_boxes(img, self.last_results)
-
-            return img
-
-    webrtc_streamer(
-        key="yolo-live",
-        video_transformer_factory=YOLOVideoTransformer,
-        media_stream_constraints={"video": True, "audio": False},
-    )
-
-    st.markdown(
-        """
-        <style>
-        video {
-            width: 100% !important;
-            height: auto !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+        st.image(frame, caption="Detection Result", use_container_width=True)
