@@ -66,25 +66,34 @@ elif mode == "Video":
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
 
-        if st.button("Run Detection (OpenCV Window)"):
-            cap = cv2.VideoCapture(tfile.name)
+        cap = cv2.VideoCapture(tfile.name)
 
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
+        output_path = "output.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        width, height = 640, 360
 
-                results = MODEL_VIDEO(frame, imgsz=416)[0]
-                frame = draw_boxes(frame, results)
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-                # SAME AS TRACKER FILE ✅
-                cv2.imshow("Video Detection", frame)
+        st.info("Processing video...")
 
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-            cap.release()
-            cv2.destroyAllWindows()
+            frame = cv2.resize(frame, (width, height))
+            results = MODEL_VIDEO(frame, imgsz=320)[0]
+            frame = draw_boxes(frame, results)
+
+            out.write(frame)
+
+        cap.release()
+        out.release()
+
+        st.success("Done!")
+
+        st.video(output_path)
 # ---------------- WEBCAM MODE (HIGH ACCURACY) ----------------
 elif mode == "Webcam":
     st.write("Live Webcam Detection (High Accuracy Mode)")
