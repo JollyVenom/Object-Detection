@@ -58,38 +58,30 @@ if mode == "Image":
 
 
 # ---------------- VIDEO MODE ----------------
-elif mode == "Video":
-    uploaded_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
+import time
 
-    if uploaded_file:
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        tfile.write(uploaded_file.read())
+frame_skip = 5
+count = 0
+last_results = None
 
-        cap = cv2.VideoCapture(tfile.name)
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
 
-        stframe = st.empty()
-        frame_skip = 2
-        count = 0
-        last_results = None
+    frame = cv2.resize(frame, (480, 270))
+    count += 1
 
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
+    if count % frame_skip == 0:
+        last_results = MODEL_VIDEO(frame, imgsz=320)[0]
 
-            frame = cv2.resize(frame, (640, 360))
-            count += 1
+    if last_results is not None:
+        frame = draw_boxes(frame, last_results)
 
-            if count % frame_skip == 0:
-                last_results = MODEL_VIDEO(frame, imgsz=416)[0]
+    if count % 2 == 0:  # reduce UI updates
+        stframe.image(frame, channels="BGR", use_container_width=True)
 
-            if last_results is not None:
-                frame = draw_boxes(frame, last_results)
-
-            stframe.image(frame, channels="BGR", use_container_width=True)
-
-        cap.release()
-
+    time.sleep(0.03)
 
 # ---------------- WEBCAM MODE ----------------
 elif mode == "Webcam":
