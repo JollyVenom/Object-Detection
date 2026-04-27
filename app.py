@@ -4,22 +4,23 @@ import numpy as np
 from ultralytics import YOLO
 from PIL import Image
 import tempfile
+import os
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
-import time
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
 
 # ---------------- LOAD MODELS ----------------
-MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")   # accurate
-MODEL_VIDEO = YOLO("yolov8n.pt")         # fast
-MODEL_IMAGE = YOLO("yolov8m.pt")         # accurate
+# Tip: Using @st.cache_resource here in the future can prevent models from reloading on every interaction!
+MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")
+MODEL_VIDEO = YOLO("yolov8n.pt")
+MODEL_IMAGE = YOLO("yolov8m.pt")
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
-conf_threshold = st.slider("Confidence Threshold", 0.1, 1.0, 0.4)
+conf_threshold = st.sidebar.slider("Confidence Threshold", 0.1, 1.0, 0.4)
 
 # ---------------- STYLE ----------------
 BOX_COLOR = (0, 0, 255)
@@ -40,6 +41,7 @@ def draw_boxes(frame, results):
         cv2.rectangle(frame, (x1, y1), (x2, y2), BOX_COLOR, THICKNESS)
         cv2.putText(frame, label, (x1, y1 - 5),
                     cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, BOX_COLOR, 1)
+
     return frame
 
 
@@ -57,63 +59,79 @@ if mode == "Image":
         st.image(frame, caption="Detection Result", use_container_width=True)
 
 
-# ---------------- VIDEO MODE (SMOOTH PLAYBACK) ----------------
+# ---------------- VIDEO MODE ----------------
 elif mode == "Video":
     uploaded_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
     if uploaded_file:
-        # Save video temporarily
-        if "video_path" not in st.session_state:
-            tfile = tempfile.NamedTemporaryFile(delete=False)
-            tfile.write(uploaded_file.read())
-            st.session_state.video_path = tfile.name
+        # Create temp files for input, raw output, and web-ready output
+        tfile_in = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        tfile_in.write(uploaded_file.read())
+        input_path = tfile_in.name
+        
+        output_path = input_path.replace('.mp4', '_raw.mp4')
+        final_path = input_path.replace('.mp4', '_web.mp4')
 
-        # Initialize capture once
-        if "cap" not in st.session_state:
-            st.session_state.cap = cv2.VideoCapture(st.session_state.video_path)
-            st.session_state.frame_count = 0
+        cap = cv2.VideoCapture(input_path)
+        
+        # Get video properties
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+        # Set up OpenCV VideoWriter (using your resized dimensions: 640x360)
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_path, fourcc, fps, (640, 360))
 
-        cap = st.session_state.cap
-        stframe = st.empty()
+        # UI Elements for progress
+        st.write("Processing video... This may take a moment.")
+        progress_bar = st.progress(0)
+        
+        frame_skip = 2
+        count = 0
+        last_results = None
 
-        # Controls
-        col1, col2 = st.columns(2)
-        play = col1.button("▶ Play")
-        stop = col2.button("⏹ Stop")
-
-        if stop:
-            cap.release()
-            st.session_state.clear()
-            st.warning("Video stopped")
-            st.stop()
-
-        if play:
+        while cap.isOpened():
             ret, frame = cap.read()
-
             if not ret:
-                st.success("Video finished")
-                cap.release()
-                st.session_state.clear()
-                st.stop()
+                break
 
-            # -------- OPTIMIZATION --------
-            frame = cv2.resize(frame, (480, 270))
-            st.session_state.frame_count += 1
+            count += 1
+            frame = cv2.resize(frame, (640, 360))
 
-            # Run detection every 5 frames
-            if st.session_state.frame_count % 5 == 0:
-                results = MODEL_VIDEO(frame, imgsz=320)[0]
-                frame = draw_boxes(frame, results)
+            # Run YOLO inference
+            if count % frame_skip == 0:
+                last_results = MODEL_VIDEO(frame, imgsz=416)[0]
 
-            stframe.image(frame, channels="BGR", use_container_width=True)
+            # Draw boxes if we have results
+            if last_results is not None:
+                frame = draw_boxes(frame, last_results)
 
-            time.sleep(0.03)  # control speed
-            st.rerun()
+            # Write the processed frame to the new video file
+            out.write(frame)
+            
+            # Update progress bar
+            if total_frames > 0:
+                progress_bar.progress(min(count / total_frames, 1.0))
+
+        # Release resources
+        cap.release()
+        out.release()
+        
+        # Convert the video to H264 codec using FFmpeg
+        st.write("Converting to web-friendly format...")
+        os.system(f"ffmpeg -y -i {output_path} -vcodec libx264 {final_path}")
+
+        # Clear progress UI and display the final video
+        progress_bar.empty()
+        st.success("Processing Complete!")
+        
+        with open(final_path, 'rb') as video_file:
+            st.video(video_file.read())
 
 
 # ---------------- WEBCAM MODE ----------------
 elif mode == "Webcam":
-    st.write("Live Webcam Detection")
+    st.write("Live Webcam Detection (High Accuracy Mode)")
 
     class YOLOVideoTransformer(VideoTransformerBase):
         def transform(self, frame):
@@ -123,7 +141,7 @@ elif mode == "Webcam":
             return img
 
     webrtc_streamer(
-        key="webcam",
+        key="yolo-live",
         video_transformer_factory=YOLOVideoTransformer,
         media_stream_constraints={
             "video": {
