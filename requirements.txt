@@ -8,3 +8,4 @@ av
 torch
 torchvision
 imageio-ffmpeg
+onnxruntime
