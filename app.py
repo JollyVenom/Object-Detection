@@ -6,15 +6,16 @@ from PIL import Image
 import tempfile
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
+import time
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
 
 # ---------------- LOAD MODELS ----------------
-MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")
-MODEL_VIDEO = YOLO("yolov8n.pt")
-MODEL_IMAGE = YOLO("yolov8m.pt")
+MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")   # accurate
+MODEL_VIDEO = YOLO("yolov8n.pt")         # fast
+MODEL_IMAGE = YOLO("yolov8m.pt")         # accurate
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
@@ -58,30 +59,47 @@ if mode == "Image":
 
 
 # ---------------- VIDEO MODE ----------------
-import time
+elif mode == "Video":
+    uploaded_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
 
-frame_skip = 5
-count = 0
-last_results = None
+    if uploaded_file:
+        tfile = tempfile.NamedTemporaryFile(delete=False)
+        tfile.write(uploaded_file.read())
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
+        cap = cv2.VideoCapture(tfile.name)
 
-    frame = cv2.resize(frame, (480, 270))
-    count += 1
+        stframe = st.empty()
 
-    if count % frame_skip == 0:
-        last_results = MODEL_VIDEO(frame, imgsz=320)[0]
+        # -------- OPTIMIZATION SETTINGS --------
+        frame_skip = 5          # skip frames (important for cloud)
+        count = 0
+        last_results = None
 
-    if last_results is not None:
-        frame = draw_boxes(frame, last_results)
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-    if count % 2 == 0:  # reduce UI updates
-        stframe.image(frame, channels="BGR", use_container_width=True)
+            # resize for speed
+            frame = cv2.resize(frame, (480, 270))
+            count += 1
 
-    time.sleep(0.03)
+            # run detection every few frames
+            if count % frame_skip == 0:
+                last_results = MODEL_VIDEO(frame, imgsz=320)[0]
+
+            # draw previous detections
+            if last_results is not None:
+                frame = draw_boxes(frame, last_results)
+
+            # reduce UI updates
+            if count % 2 == 0:
+                stframe.image(frame, channels="BGR", use_container_width=True)
+
+            time.sleep(0.03)  # control speed (prevents lag)
+
+        cap.release()
+
 
 # ---------------- WEBCAM MODE ----------------
 elif mode == "Webcam":
@@ -90,8 +108,10 @@ elif mode == "Webcam":
     class YOLOVideoTransformer(VideoTransformerBase):
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
+
             results = MODEL_WEBCAM(img, imgsz=512)[0]
             img = draw_boxes(img, results)
+
             return img
 
     webrtc_streamer(
@@ -107,6 +127,7 @@ elif mode == "Webcam":
         },
     )
 
+    # make webcam full width
     st.markdown(
         """
         <style>
