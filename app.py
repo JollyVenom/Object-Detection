@@ -17,11 +17,8 @@ st.title("YOLO Object Detection App")
 @st.cache_resource
 def load_models():
     return {
-        # Using the highly optimized ONNX model for real-time webcam and video
         "webcam": YOLO("yolov8n-oiv7.pt"),
         "video": YOLO("yolov8s.pt"),
-        
-        # Using the standard PyTorch model for high-accuracy static image detection
         "image": YOLO("yolov8m.pt")
     }
 
@@ -148,19 +145,36 @@ elif mode == "Video":
 
 # ---------------- WEBCAM MODE ----------------
 elif mode == "Webcam":
-    st.write("Live Webcam Detection (High Performance ONNX Mode)")
+    st.write("Live Webcam Detection (Smooth Streaming Mode)")
 
     class YOLOVideoTransformer(VideoTransformerBase):
+        def __init__(self):
+            self.frame_count = 0
+            self.last_img = None
+
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
-            # Running inference using the yolov8n.onnx model
-            results = MODEL_WEBCAM(img, imgsz=410)[0]
-            img = draw_boxes(img, results)
+            self.frame_count += 1
+            
+            # Process every 3rd frame to prevent freezing on Streamlit Cloud CPU
+            if self.frame_count % 3 == 0 or self.last_img is None:
+                # Changed imgsz from 410 to 416 (MUST be a multiple of 32 for YOLO)
+                results = MODEL_WEBCAM(img, imgsz=416)[0]
+                img = draw_boxes(img, results)
+                self.last_img = img
+            else:
+                # Re-use the last drawn image to save CPU
+                img = self.last_img
+                
             return img
 
     webrtc_streamer(
         key="yolo-live",
         video_transformer_factory=YOLOVideoTransformer,
+        # Added STUN Servers: Required to establish a connection on Streamlit Cloud!
+        rtc_configuration={
+            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+        },
         media_stream_constraints={
             "video": {
                 "width": {"ideal": 1280},
