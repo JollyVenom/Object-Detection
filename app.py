@@ -7,16 +7,26 @@ import tempfile
 import os
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
+import imageio_ffmpeg
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
 
 # ---------------- LOAD MODELS ----------------
-# Tip: Using @st.cache_resource here in the future can prevent models from reloading on every interaction!
-MODEL_WEBCAM = YOLO("yolov8s-oiv7.pt")
-MODEL_VIDEO = YOLO("yolov8n.pt")
-MODEL_IMAGE = YOLO("yolov8m.pt")
+# Using @st.cache_resource prevents models from reloading every time you click a button
+@st.cache_resource
+def load_models():
+    return {
+        "webcam": YOLO("yolov8s-oiv7.pt"),
+        "video": YOLO("yolov8n.pt"),
+        "image": YOLO("yolov8m.pt")
+    }
+
+models = load_models()
+MODEL_WEBCAM = models["webcam"]
+MODEL_VIDEO = models["video"]
+MODEL_IMAGE = models["image"]
 
 # ---------------- SIDEBAR ----------------
 mode = st.sidebar.selectbox("Choose Mode", ["Image", "Video", "Webcam"])
@@ -117,9 +127,14 @@ elif mode == "Video":
         cap.release()
         out.release()
         
-        # Convert the video to H264 codec using FFmpeg
+        # Convert the video to H264 codec using Python's FFmpeg binary
         st.write("Converting to web-friendly format...")
-        os.system(f"ffmpeg -y -i {output_path} -vcodec libx264 {final_path}")
+        
+        # Get the path to the installed ffmpeg binary
+        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe() 
+        
+        # Run the conversion
+        os.system(f'"{ffmpeg_path}" -y -i "{output_path}" -vcodec libx264 "{final_path}"')
 
         # Clear progress UI and display the final video
         progress_bar.empty()
