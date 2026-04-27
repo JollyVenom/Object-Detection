@@ -154,7 +154,7 @@ elif mode == "Webcam":
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
             # Running inference using the yolov8n.onnx model
-            results = MODEL_WEBCAM(img, imgsz=512)[0]
+            results = MODEL_WEBCAM(img, imgsz=410)[0]
             img = draw_boxes(img, results)
             return img
 
