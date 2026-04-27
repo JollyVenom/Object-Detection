@@ -18,8 +18,8 @@ st.title("YOLO Object Detection App")
 def load_models():
     return {
         # Using the highly optimized ONNX model for real-time webcam and video
-        "webcam": YOLO("yolov8n.onnx"),
-        "video": YOLO("yolov8n.onnx"),
+        "webcam": YOLO("yolov8n-oiv7.pt"),
+        "video": YOLO("yolov8s.pt"),
         
         # Using the standard PyTorch model for high-accuracy static image detection
         "image": YOLO("yolov8m.pt")
