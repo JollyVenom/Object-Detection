@@ -14,12 +14,14 @@ st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
 
 # ---------------- LOAD MODELS ----------------
-# Using @st.cache_resource prevents models from reloading every time you click a button
 @st.cache_resource
 def load_models():
     return {
-        "webcam": YOLO("yolov8s-oiv7.pt"),
-        "video": YOLO("yolov8n.pt"),
+        # Using the highly optimized ONNX model for real-time webcam and video
+        "webcam": YOLO("yolov8n.onnx"),
+        "video": YOLO("yolov8n.onnx"),
+        
+        # Using the standard PyTorch model for high-accuracy static image detection
         "image": YOLO("yolov8m.pt")
     }
 
@@ -146,11 +148,12 @@ elif mode == "Video":
 
 # ---------------- WEBCAM MODE ----------------
 elif mode == "Webcam":
-    st.write("Live Webcam Detection (High Accuracy Mode)")
+    st.write("Live Webcam Detection (High Performance ONNX Mode)")
 
     class YOLOVideoTransformer(VideoTransformerBase):
         def transform(self, frame):
             img = frame.to_ndarray(format="bgr24")
+            # Running inference using the yolov8n.onnx model
             results = MODEL_WEBCAM(img, imgsz=512)[0]
             img = draw_boxes(img, results)
             return img
