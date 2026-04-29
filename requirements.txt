@@ -5,7 +5,6 @@ ultralytics
 pillow
 streamlit-webrtc
 av
-torch
-torchvision
+
 imageio-ffmpeg
 onnxruntime
