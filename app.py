@@ -1,28 +1,13 @@
-import sys
-import subprocess
-import importlib
-
-# ----- THE ULTIMATE OPENCV FIX FOR STREAMLIT CLOUD -----
-# This safely catches the broken OpenCV import and forcefully repairs it 
-# inside the correct Streamlit virtual environment.
-try:
-    import cv2
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python", "opencv-python-headless"])
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "opencv-python-headless"])
-    importlib.invalidate_caches() # Tells Python to refresh and find the new package
-    import cv2
-
 import streamlit as st
+import cv2
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
 import tempfile
+import os
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
 import imageio_ffmpeg
-
-# ... [Keep the rest of your app.py code exactly the same below this] ...
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
