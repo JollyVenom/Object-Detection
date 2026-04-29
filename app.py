@@ -58,11 +58,17 @@ if mode == "Image":
     uploaded_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
 
     if uploaded_file:
-        image = Image.open(uploaded_file)
-        frame = np.array(image)
+        # Force the image to standard 3-channel RGB (Fixes RGBA/Grayscale crashes)
+        image = Image.open(uploaded_file).convert("RGB")
+        
+        # Convert PIL Image (RGB) to OpenCV format (BGR) for YOLO
+        frame = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
         results = MODEL_IMAGE(frame, imgsz=640)[0]
         frame = draw_boxes(frame, results)
+
+        # Convert back to RGB so Streamlit displays the colors correctly
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         st.image(frame, caption="Detection Result", use_container_width=True)
 
