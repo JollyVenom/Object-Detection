@@ -1,5 +1,4 @@
 streamlit
-opencv-python-headless
 numpy
 ultralytics
 pillow
@@ -7,3 +6,4 @@ streamlit-webrtc
 av
 imageio-ffmpeg
 onnxruntime
+tornado<6.4
