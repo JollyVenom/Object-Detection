@@ -35,8 +35,20 @@ BOX_COLOR = (0, 0, 255)
 THICKNESS = 1
 FONT_SCALE = 0.5
 
-# ---------------- DRAW FUNCTION ----------------
+# ---------------- DRAW FUNCTION (UPDATED FOR DYNAMIC SCALING) ----------------
 def draw_boxes(frame, results):
+    if results.boxes is None:
+        return frame
+        
+    # 1. Calculate dynamic scale based on the frame's height and width
+    h, w = frame.shape[:2]
+    # The '800.0' is a baseline resolution. Adjust it higher to make boxes generally smaller.
+    dynamic_scale = min(w, h) / 800.0  
+    
+    # 2. Set dynamic thickness and font scale (with minimum fail-safes so they never disappear)
+    dynamic_thickness = max(1, int(2 * dynamic_scale))
+    dynamic_font_scale = max(0.4, 0.7 * dynamic_scale)
+        
     for box in results.boxes:
         conf = float(box.conf[0])
         if conf < conf_threshold:
@@ -44,14 +56,27 @@ def draw_boxes(frame, results):
 
         x1, y1, x2, y2 = map(int, box.xyxy[0])
         cls = int(box.cls[0])
+        
+        # Base label with Class Name and Confidence
         label = f"{results.names[cls]} {conf:.2f}"
+        
+        # If the object has a Tracking ID, add it to the label
+        if box.id is not None:
+            track_id = int(box.id[0])
+            label = f"[ID: {track_id}] {label}"
 
-        cv2.rectangle(frame, (x1, y1), (x2, y2), BOX_COLOR, THICKNESS)
+        # Draw the bounding box
+        cv2.rectangle(frame, (x1, y1), (x2, y2), BOX_COLOR, dynamic_thickness)
+        
+        # Draw the text background (optional, but makes text much easier to read)
+        (text_w, text_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, dynamic_font_scale, dynamic_thickness)
+        cv2.rectangle(frame, (x1, y1 - text_h - 10), (x1 + text_w, y1), BOX_COLOR, -1)
+        
+        # Draw the text in white so it contrasts with the blue box
         cv2.putText(frame, label, (x1, y1 - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, BOX_COLOR, 1)
+                    cv2.FONT_HERSHEY_SIMPLEX, dynamic_font_scale, (255, 255, 255), dynamic_thickness)
 
     return frame
-
 
 # ---------------- IMAGE MODE ----------------
 if mode == "Image":
