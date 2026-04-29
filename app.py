@@ -1,14 +1,21 @@
+
+import os
+import sys
+import subprocess
+try:
+    subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python"])
+except:
+    pass
+
 import streamlit as st
 import cv2
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
 import tempfile
-import os
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import av
 import imageio_ffmpeg
-
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(layout="wide")
 st.title("YOLO Object Detection App")
