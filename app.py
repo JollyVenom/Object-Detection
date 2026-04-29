@@ -1,12 +1,8 @@
 
 import os
-import sys
-import subprocess
-try:
-    subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python"])
-except:
-    pass
-
+os.system("pip uninstall -y opencv-python opencv-python-headless")
+# 2. Freshly install ONLY the safe, server-friendly headless version
+os.system("pip install opencv-python-headless==4.9.0.80")
 import streamlit as st
 import cv2
 import numpy as np
